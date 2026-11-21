@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CivicTriage</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--tx:#1a1d23;--mu:#667085;--bd:#e1e4ea;--ac:#1d5fd1;--on:#fff;--cr:#b42318;--hi:#c2570c;--me:#a16207;--lo:#2f7d4f;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#13151a;--card:#1c1f26;--tx:#eceef2;--mu:#98a0ae;--bd:#2b303a;--ac:#6ea0ff;--on:#0b1020;--cr:#ff8a80;--hi:#ffab6b;--me:#f1c35b;--lo:#6fd19a}}
+:root[data-theme="dark"]{--bg:#13151a;--card:#1c1f26;--tx:#eceef2;--mu:#98a0ae;--bd:#2b303a;--ac:#6ea0ff;--on:#0b1020;--cr:#ff8a80;--hi:#ffab6b;--me:#f1c35b;--lo:#6fd19a}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{background:var(--card);border-bottom:1px solid var(--bd);padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
+header b{font-size:17px}nav{display:flex;gap:6px;margin-left:auto}
+button,.btn{font:inherit;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:7px 13px;border-radius:8px;cursor:pointer}
+button.p{background:var(--ac);color:var(--on);border-color:var(--ac)}button.on{border-color:var(--ac);color:var(--ac);font-weight:600}
+button:disabled{opacity:.5;cursor:default}
+main{max-width:980px;margin:0 auto;padding:18px 14px 60px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:18px;margin-bottom:14px}
+h2{margin:0 0 4px;font-size:20px}h3{margin:0 0 8px;font-size:16px}.mu{color:var(--mu);font-size:13px}
+label{display:block;font-size:13px;color:var(--mu);margin:12px 0 4px}
+input,textarea,select{width:100%;font:inherit;padding:9px 11px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx)}
+textarea{min-height:100px;resize:vertical}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:700;border:1px solid currentColor}
+.Critical{color:var(--cr)}.High{color:var(--hi)}.Medium{color:var(--me)}.Low{color:var(--lo)}
+.err{color:var(--cr);font-size:13px;margin-top:8px}.ok{color:var(--lo);font-size:13px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.t{border-left:4px solid currentColor;padding-left:12px;margin-bottom:12px}.t .in{color:var(--tx)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+.stats div{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px;text-align:center}.stats b{font-size:22px;display:block}
+img.th{max-width:160px;max-height:110px;border-radius:8px;margin-top:6px;display:block}
+.scroll{overflow-x:auto}
+</style></head><body>
+<header><b>🏛️ CivicTriage</b><span class="mu" id="who"></span><nav id="nav"></nav></header>
+<main id="app"></main>
+<script>
+const CATS={roads:"Roads & Infrastructure",waste:"Solid Waste Management",water:"Water Supply Board",electricity:"Electricity & Street Lighting",trees:"Parks & Horticulture",drainage:"Storm Water Drainage",other:"General Administration"};
+const SEV=["Low","Medium","High","Critical"];
+const OFFICER_PW="10234@",PEND={};
+const KW={roads:"pothole road crack footpath bridge speed breaker gaddha gadda sadak sadak ರಸ್ತೆ गड्ढा सड़क రోడ్డు గుంత",waste:"garbage trash waste dump litter bin kachra kooda कचरा చెత్త ಕಸ",water:"water leak pipe burst supply tap paani pani पानी నీరు నీటి ನೀರು",electricity:"streetlight street light lamp wire electric power pole transformer sparking बिजली కరెంట్ విద్యుత్ ವಿದ್ಯುತ್",trees:"tree branch fallen uprooted पेड़ చెట్టు ಮರ",drainage:"drain sewage sewer manhole overflow flood clogged naala nala नाला డ్రైనేజీ మురుగు ಚರಂಡಿ"};
+const HI=/live wire|sparking|electrocut|manhole open|open manhole|gas leak|collapsed|fire|injur|accident|fell|child|school|खुला|ప్రమాద/i;
+const MI=/burst|flood|overflow|fallen|uprooted|blocked|no water|dark|कई दिन|days/i;
+let S={tab:"report",cit:ld("ct_cit"),off:ldS("ct_off"),tickets:[],f:{sev:"",dept:"",st:"open"},open:null,msg:"",busy:false,db:null,shared:false,note:"",mode:"login",offs:[],unsub:null};
+function ld(k){try{return JSON.parse(localStorage.getItem(k)||"null")}catch(e){return null}}
+function sv(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function ldS(k){try{return JSON.parse(sessionStorage.getItem(k)||"null")}catch(e){return null}}
+function svS(k,v){try{v?sessionStorage.setItem(k,JSON.stringify(v)):sessionStorage.removeItem(k)}catch(e){}}
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const $=id=>document.getElementById(id);
+/* ---------- storage: shared db when available, otherwise this browser ---------- */
+async function initStore(){
+  S.tickets=ld("ct_tickets")||[];S.offs=ld("ct_offs")||[];render();
+  try{const db=await claude.use("db");if(db){S.db=db;S.shared=true;
+    S.unsub=db.collection("tickets").onSnapshot(s=>{if(S.shared){S.tickets=s.docs.map(d=>d.data());for(const id in PEND){const i=S.tickets.findIndex(x=>x.id===id);if(i>=0)S.tickets[i]=PEND[id];else S.tickets.push(PEND[id])}render()}},()=>{S.shared=false;render()});
+    db.collection("officers").onSnapshot(s=>{if(S.shared){S.offs=s.docs.map(d=>d.data());render()}},()=>{})}}catch(e){}
+  render();
+}
+function dropShared(){S.shared=false;try{S.unsub&&S.unsub()}catch(e){}S.note="Shared storage refused this change, so it is saved in this browser only.";render()}
+async function saveT(t){
+  t=JSON.parse(JSON.stringify(t));
+  const i=S.tickets.findIndex(x=>x.id===t.id);if(i>=0)S.tickets[i]=t;else S.tickets.push(t);
+  sv("ct_tickets",S.tickets);
+  if(S.shared){PEND[t.id]=t;try{Promise.resolve(S.db.collection("tickets").doc(t.id).set(t)).then(()=>{delete PEND[t.id]},()=>dropShared())}catch(e){dropShared()}}
+}
+async function saveO(o){
+  S.offs=S.offs.filter(x=>x.email!==o.email).concat(o);sv("ct_offs",S.offs);
+  if(S.shared){try{await S.db.collection("officers").doc(o.email.replace(/[^a-z0-9]/g,"_")).set(o)}catch(e){dropShared()}}
+}
+async function sha(s){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("ct|"+s));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
+/* ---------- analysis ---------- */
+function fallback(text){
+  const l=text.toLowerCase();let best="other",n=0;
+  for(const[c,w]of Object.entries(KW)){const k=w.split(/\s+/).filter(x=>l.includes(x)).length;if(k>n){n=k;best=c}}
+  let sev="Low",why="Routine issue with no stated hazard.";
+  if(HI.test(text)){sev="Critical";why="Wording suggests a danger to life or safety."}
+  else if(MI.test(text)){sev="High";why="Service disruption or hazard reported."}
+  else if(n>0){sev="Medium";why="Civic fault that affects residents."}
+  return{category:best,severity:sev,reason:why,summary:text.slice(0,110),location:"",method:"rules-fallback"};
+}
+function thumb(file){return new Promise(res=>{const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,640/Math.max(im.width,im.height)),c=document.createElement("canvas");c.width=im.width*k;c.height=im.height*k;c.getContext("2d").drawImage(im,0,0,c.width,c.height);const url=c.toDataURL("image/jpeg",.6);c.toBlob(b=>res({url,blob:b}),"image/jpeg",.6)};im.onerror=()=>res(null);im.src=r.result};r.onerror=()=>res(null);r.readAsDataURL(file)})}
+async function analyse(text,landmark,photo){
+  try{
+    const sample=await claude.use("sample");if(!sample)throw 0;
+    const open=S.tickets.filter(t=>t.status!=="resolved").slice(-25).map(t=>({id:t.id,cat:t.category,loc:t.location,s:t.summary}));
+    const p=`You triage civic complaints for an Indian municipality. Complaint may be in any language (English, Hindi, Telugu, Kannada, romanised etc). Landmark: "${landmark}".\nComplaint: """${text}"""\nOpen tickets: ${JSON.stringify(open)}\nReturn ONLY JSON: {"category":"roads|waste|water|electricity|trees|drainage|other","severity":"Low|Medium|High|Critical","reason":"one line English","summary":"one line English","location":"place if stated","duplicate_of":"ticket id of the same problem at the same place, else null"}\nCritical = immediate danger to life (live wires, open manhole, gas, collapsed structure). High = serious disruption or injury risk. Medium = needs timely fix. Low = minor. If a photo conflicts with the text, trust the photo and say so in reason. Open manhole/sewer = drainage.`;
+    const o={modelTier:"quick",cache:false};if(photo){const lim=await sample.limits();if(lim&&lim.images)o.images=[photo.blob]}
+    const r=await sample.json(p,o);
+    if(!CATS[r.category]||!SEV.includes(r.severity))throw 0;
+    return{...r,method:"llm"};
+  }catch(e){return fallback(text)}
+}
+const tok=s=>new Set(s.toLowerCase().split(/[^a-z0-9\u0900-\u0fff]+/).filter(w=>w.length>2));
+function sim(a,b){const A=tok(a),B=tok(b);if(!A.size||!B.size)return 0;let i=0;A.forEach(x=>B.has(x)&&i++);return i/(A.size+B.size-i)}
+function findDup(r,text,landmark){
+  if(r.duplicate_of){const t=S.tickets.find(x=>x.id===r.duplicate_of&&x.status!=="resolved"&&x.category===r.category);if(t)return t}
+  return S.tickets.find(t=>t.status!=="resolved"&&t.category===r.category&&((landmark&&t.landmark&&t.landmark.toLowerCase()===landmark.toLowerCase())||sim(text,t.reports.map(x=>x.text).join(" "))>.5))||null;
+}
+async function submit(){
+  const text=$("c_text").value.trim(),lm=$("c_lm").value.trim(),f=$("c_ph").files[0];
+  if(text.length<8){S.msg="Please describe the problem in a few words.";return render()}
+  S.busy=true;S.msg="";render();
+  const photo=f?await thumb(f):null;
+  const r=await analyse(text,lm,photo);
+  const rep={text,photo:photo?photo.url:null,name:S.cit.name,phone:S.cit.phone,email:S.cit.email,at:Date.now(),by:S.cit.phone};
+  const d=findDup(r,text,lm);let t;
+  if(d){t=d;t.reports.push(rep);if(SEV.indexOf(r.severity)>SEV.indexOf(t.severity)&&!t.verified){t.severity=r.severity;t.reason=r.reason}t.log.push("Duplicate report merged "+new Date().toLocaleString())}
+  else t={id:"T"+Date.now().toString(36).toUpperCase(),category:r.category,department:CATS[r.category],severity:r.severity,reason:r.reason,summary:r.summary||text.slice(0,100),location:r.location||lm,landmark:lm,status:"open",method:r.method,created:Date.now(),reports:[rep],log:["Ticket created "+new Date().toLocaleString()]};
+  await saveT(t);S.busy=false;S.last={t,dup:!!d};render();
+}
+/* ---------- views ---------- */
+const sorted=a=>[...a].sort((x,y)=>SEV.indexOf(y.severity)-SEV.indexOf(x.severity)||y.reports.length-x.reports.length||x.created-y.created);
+function tcard(t,off){
+  const o=S.open===t.id;
+  return `<div class="t ${t.severity}"><div class="row"><span class="badge">${t.severity}</span><b class="in">${esc(t.summary)}</b></div>
+  <div class="mu in">${esc(t.reason)}</div>
+  ${t.resolution?`<div class="ok" style="margin:6px 0"><b>✔ Resolved</b> by ${esc(t.resolution.dept)} on ${new Date(t.resolution.at).toLocaleDateString()}${t.resolution.note?": "+esc(t.resolution.note):""}${t.resolution.photo?`<img class="th" src="${t.resolution.photo}" alt="Completed work">`:""}</div>`:""}
+  <div class="mu">${esc(t.department)} · ${esc(t.location||"location not given")} · ${t.reports.length} report${t.reports.length>1?"s":""} · ${t.status==="resolved"?"✔ resolved":esc(t.status)} · ${t.id}${t.method==="rules-fallback"?" · keyword rules":""}</div>
+  ${off?`<div class="row" style="margin-top:6px"><button data-a="open" data-id="${t.id}">${o?"Hide":"Details"}</button>${t.status==="open"?`<button class="p" data-a="start" data-id="${t.id}">Start work</button>`:""}${t.status!=="resolved"?`<button data-a="rform" data-id="${t.id}">Resolve</button>`:`<button data-a="reopen" data-id="${t.id}">Reopen</button>`}</div>`:""}
+  ${off&&S.resolving===t.id?`<div style="margin-top:8px"><label>Message to the citizen (what was done)</label><textarea id="r_note" style="min-height:70px" placeholder="e.g. Pothole filled and road levelled"></textarea><label>Photo of the completed work (optional)</label><input id="r_ph" type="file" accept="image/*"><div class="row" style="margin-top:8px"><button class="p" data-a="rconfirm" data-id="${t.id}">Confirm &amp; notify citizen</button><button data-a="rcancel">Cancel</button></div></div>`:""}${off&&o?`<div style="margin-top:8px">${t.reports.map(r=>`<div class="mu in" style="margin:6px 0">“${esc(r.text)}”<br>— ${esc(r.name)}, ${esc(r.phone)}, ${esc(r.email)}${r.photo?`<img class="th" src="${r.photo}" alt="Complaint photo">`:""}</div>`).join("")}<div class="mu">${t.log.map(esc).join("<br>")}</div></div>`:""}</div>`;
+}
+function vReport(){
+  if(!S.cit)return `<div class="grid"><div class="card"><h2>Citizen registration</h2><div class="mu">Register once with your contact details to report issues and follow them up.</div>
+  <label>Full name</label><input id="r_name" autocomplete="name"><label>Mobile number</label><input id="r_ph" inputmode="tel" autocomplete="tel" placeholder="10-digit number"><label>Email</label><input id="r_em" type="email" autocomplete="email">
+  <div class="err">${esc(S.msg)}</div><p><button class="p" data-a="reg">Register &amp; continue</button></p></div>
+  <div class="card"><h3>How it works</h3><div class="mu">Describe the problem in English, Hindi, Telugu, Kannada or any language, add a photo if you like. The system classifies it, rates severity, merges duplicate reports and sends it to the right department.</div></div></div>`;
+  const mine=S.tickets.filter(t=>t.reports.some(r=>r.by===S.cit.phone));
+  const L=S.last;
+  return `<div class="card"><h2>Report an issue</h2><div class="mu">Signed in as ${esc(S.cit.name)} (${esc(S.cit.phone)}) · <a href="#" data-a="clogout">Sign out</a></div>
+  <label>What is the problem? (any language)</label><textarea id="c_text" placeholder="e.g. Big gaddha on MG Road near the bus stop, two bikes fell yesterday"></textarea>
+  <div class="grid"><div><label>Landmark / location</label><input id="c_lm"></div><div><label>Photo (optional)</label><input id="c_ph" type="file" accept="image/*"></div></div>
+  <div class="err">${esc(S.msg)}</div><p><button class="p" data-a="submit" ${S.busy?"disabled":""}>${S.busy?"Analysing…":"Submit complaint"}</button></p>
+  ${L?`<div class="card" style="margin:0">${L.dup?"<b>Merged into an existing ticket</b> — more reports raise its priority.":"<b>Ticket created</b>"}${tcard(L.t,false)}</div>`:""}</div>
+  <div class="card"><h3>My complaints</h3>${mine.length?sorted(mine).map(t=>tcard(t,false)).join(""):'<div class="mu">Nothing reported yet.</div>'}</div>`;
+}
+function vOfficer(){
+  if(!S.off)return `<div class="card" style="max-width:420px;margin:auto"><h2>Officer sign-in</h2><div class="mu">For municipal employees only.</div>
+  ${S.mode==="reg"?`<label>Full name</label><input id="o_nm"><label>Department</label><select id="o_dp"><option value="*">All departments (control room)</option>${Object.values(CATS).map(d=>`<option>${esc(d)}</option>`).join("")}</select><label>Official email</label><input id="o_id" type="email" autocomplete="email"><label>Password (at least 8 characters)</label><input id="o_pw" type="password" autocomplete="new-password"><label>Department access code</label><input id="o_ac" type="password">`:`<label>Email ID</label><input id="o_id" type="email" autocomplete="username" value="${esc(S.em||"")}"><label>Department</label><select id="o_dp"><option value="*">All departments</option>${Object.values(CATS).map(d=>`<option>${esc(d)}</option>`).join("")}</select><label>Password</label><input id="o_pw" type="password" autocomplete="current-password">`}
+  <div class="err">${esc(S.msg)}</div><p class="row"><button class="p" data-a="${S.mode==="reg"?"oreg":"olog"}">${S.mode==="reg"?"Create officer account":"Sign in"}</button></p>
+  </div>`;
+  const all=S.off.dept==="*",base=S.tickets.filter(t=>all||t.department===S.off.dept);
+  const list=sorted(base.filter(t=>(!S.f.sev||t.severity===S.f.sev)&&(!S.f.dept||t.department===S.f.dept)&&(S.f.st==="all"||(S.f.st==="open"?t.status!=="resolved":t.status===S.f.st))));
+  const c=s=>base.filter(t=>t.severity===s&&t.status!=="resolved").length;
+  return `<div class="row" style="margin-bottom:12px"><h2>Officer desk</h2><span class="mu">${esc(S.off.name)} · ${all?"All departments":esc(S.off.dept)} · <a href="#" data-a="ologout">Sign out</a></span></div>
+  ${S.note?`<div class="mu" style="margin-bottom:8px">${esc(S.note)}</div>`:""}<div class="stats">${[...SEV].reverse().map(s=>`<div class="${s}"><b>${c(s)}</b>${s}</div>`).join("")}</div>
+  <div class="row" style="margin-bottom:12px"><select id="f_sev" style="width:auto"><option value="">All severities</option>${SEV.map(s=>`<option ${S.f.sev===s?"selected":""}>${s}</option>`).join("")}</select>
+  ${all?`<select id="f_dept" style="width:auto"><option value="">All departments</option>${Object.values(CATS).map(d=>`<option ${S.f.dept===d?"selected":""}>${esc(d)}</option>`).join("")}</select>`:""}
+  <select id="f_st" style="width:auto">${["open","in progress","resolved","all"].map(s=>`<option ${S.f.st===s?"selected":""}>${s}</option>`).join("")}</select>
+  ${!S.tickets.length?`<button data-a="demo">Load demo tickets</button>`:""}</div>
+  ${list.length?list.map(t=>tcard(t,true)).join(""):'<div class="card mu">No tickets match.</div>'}`;
+}
+function render(){
+  $("nav").innerHTML=`<button class="${S.tab==="report"?"on":""}" data-a="tab" data-id="report">Citizen</button><button class="${S.tab==="officer"?"on":""}" data-a="tab" data-id="officer">Officer desk</button>`;
+  $("who").textContent=S.shared?"shared storage":"saved in this browser only";
+  const IDS=["c_text","c_lm","r_note"],keep=IDS.map(i=>$(i)?.value);
+  $("app").innerHTML=S.tab==="report"?vReport():vOfficer();
+  IDS.forEach((i,k)=>{if($(i)&&keep[k])$(i).value=keep[k]});
+}
+/* ---------- events ---------- */
+document.addEventListener("change",e=>{const i=e.target.id;if(i==="f_sev")S.f.sev=e.target.value;else if(i==="f_dept")S.f.dept=e.target.value;else if(i==="f_st")S.f.st=e.target.value;else return;render()});
+document.addEventListener("click",async e=>{
+  const b=e.target.closest("[data-a]");if(!b)return;e.preventDefault();const a=b.dataset.a,id=b.dataset.id;
+  if(a==="tab"){S.tab=id;S.msg=""}
+  else if(a==="reg"){const n=$("r_name").value.trim(),p=$("r_ph").value.replace(/[\s-]/g,"").replace(/^\+91/,""),m=$("r_em").value.trim();
+    if(n.length<2)S.msg="Enter your full name.";else if(!/^[6-9]\d{9}$/.test(p))S.msg="Enter a valid 10-digit Indian mobile number.";else if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m))S.msg="Enter a valid email address.";
+    else{S.cit={name:n,phone:p,email:m};sv("ct_cit",S.cit);S.msg=""}}
+  else if(a==="clogout"){S.cit=null;S.last=null;try{localStorage.removeItem("ct_cit")}catch(x){}}
+  else if(a==="submit")return submit();
+  else if(a==="omode"){S.mode=S.mode==="reg"?"login":"reg";S.msg=""}
+  else if(a==="oreg"){const nm=$("o_nm").value.trim(),em=$("o_id").value.trim().toLowerCase(),pw=$("o_pw").value,dp=$("o_dp").value,ac=$("o_ac").value.trim();
+    if(nm.length<2)S.msg="Enter your full name.";else if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em))S.msg="Enter your official email address.";else if(pw.length<8)S.msg="Password must be at least 8 characters.";else if(ac!==ACCESS_CODE)S.msg="Invalid department access code.";else if(S.offs.some(x=>x.email===em))S.msg="An account with this email already exists.";
+    else{const o={email:em,name:nm,dept:dp,h:await sha(em+"|"+pw)};await saveO(o);S.off={email:em,name:nm,dept:dp};svS("ct_off",S.off);S.msg="";S.note=S.note||""}}
+  else if(a==="olog"){const em=$("o_id").value.trim().toLowerCase(),pw=$("o_pw").value,dp=$("o_dp").value;S.em=em;
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em))S.msg="Enter a valid email address.";else if(pw!==OFFICER_PW)S.msg="Wrong password.";
+    else{S.off={email:em,name:em,dept:dp};svS("ct_off",S.off);S.msg=""}}
+  else if(a==="ologout"){S.off=null;svS("ct_off",null)}
+  else if(a==="rform"){S.resolving=id;S.note=""}
+  else if(a==="rcancel")S.resolving=null;
+  else if(a==="rconfirm"){try{const t=S.tickets.find(x=>x.id===id);if(t){const note=($("r_note")?.value||"").trim(),f=$("r_ph")?.files?.[0];t.status="resolved";t.resolution={note,photo:null,at:Date.now(),dept:t.department,by:(S.off&&S.off.email)||""};t.log=(t.log||[]).concat(`${(S.off&&S.off.email)||"officer"}: resolved ${new Date().toLocaleString()}`);S.f.st="all";S.f.sev="";S.f.dept="";S.resolving=null;S.note="Ticket "+t.id+" marked resolved. The citizen will see your message.";saveT(t);render();
+      if(f){const ph=await Promise.race([thumb(f),new Promise(r=>setTimeout(()=>r(null),5000))]);const u=S.tickets.find(x=>x.id===id);if(ph&&u&&u.resolution){u.resolution.photo=ph.url;saveT(u)}}}}catch(err){S.note="Could not complete: "+err.message}}
+  else if(a==="open")S.open=S.open===id?null:id;
+  else if(["start","resolve","reopen"].includes(a)){const t=S.tickets.find(x=>x.id===id);if(t){if(a==="reopen")delete t.resolution;t.status=a==="start"?"in progress":a==="resolve"?"resolved":"open";t.log.push(`${S.off.name}: ${t.status} ${new Date().toLocaleString()}`);if(a==="resolve")S.f.st="all";S.note="Ticket "+t.id+" is now "+t.status+".";saveT(t)}}
+  else if(a==="demo"){const d=[["roads","Deep pothole on MG Road near bus stop, two bikes fell","MG Road bus stop","High","Injury risk to two-wheelers"],["electricity","Live wire hanging from pole near Govt School gate","Govt School gate","Critical","Live wire near children"],["waste","Garbage not collected for a week at Market Lane","Market Lane","Medium","Prolonged waste build-up"],["trees","Small branch hanging over footpath","Park Road","Low","Minor hazard, no blockage"]];
+    for(const[c,s,l,v,r]of d)await saveT({id:"T"+Math.random().toString(36).slice(2,7).toUpperCase(),category:c,department:CATS[c],severity:v,reason:r,summary:s,location:l,landmark:l,status:"open",method:"demo",created:Date.now(),reports:[{text:s,name:"Demo Citizen",phone:"9000000000",email:"demo@example.com",at:Date.now(),by:"demo"}],log:["Demo ticket"]})}
+  render();
+});
+window.addEventListener("error",e=>{S.note="Error: "+e.message;try{render()}catch(x){}});
+initStore();
+</script></body></html>
